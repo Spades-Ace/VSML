@@ -1,0 +1,24 @@
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Install build dependencies for native modules
+RUN apk add --no-cache python3 make g++ gcc
+
+# Copy package.json and package-lock.json (if exists)
+COPY backend/package*.json ./
+
+# Install dependencies 
+RUN npm install 
+
+# Copy backend source code
+COPY backend/ ./
+
+# Create data directory for SQLite database
+RUN mkdir -p data
+
+# Expose port 3001
+EXPOSE 3001
+
+# Start the application
+CMD ["npm", "start"]
