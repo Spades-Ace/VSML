@@ -6,6 +6,7 @@ const bodyParser = require('body-parser');
 const cookieParser = require('cookie-parser');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 
 // Create data directory if it doesn't exist
 const dataDir = path.join(__dirname, 'data');
@@ -45,6 +46,38 @@ db.serialize(() => {
   checkUsers.finalize();
 });
 
+// CustomSessionStore to bypass session signing
+class CustomSessionStore extends session.Store {
+  constructor() {
+    super();
+    this.sessions = {};
+  }
+
+  get(sid, callback) {
+    callback(null, this.sessions[sid]);
+  }
+
+  set(sid, session, callback) {
+    this.sessions[sid] = session;
+    callback(null);
+  }
+
+  destroy(sid, callback) {
+    delete this.sessions[sid];
+    callback(null);
+  }
+
+  // Additional methods required by the Store interface
+  all(callback) {
+    callback(null, Object.entries(this.sessions).map(([sid, session]) => ({ sid, session })));
+  }
+
+  touch(sid, session, callback) {
+    this.sessions[sid] = session;
+    callback(null);
+  }
+}
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -57,36 +90,65 @@ app.use(cors({
   credentials: true
 }));
 
-// Default session configuration
-const defaultSessionConfig = {
-  secret: 'vulnerable-session-secret',
-  resave: false,
-  saveUninitialized: true,
-  cookie: {
-    secure: false, // Should be true in production with HTTPS
-    httpOnly: true
-  }
+// Create middleware to set the session cookie manually without signing
+const setUnsignedSessionCookie = (req, res, next) => {
+  const originalWriteHead = res.writeHead;
+  res.writeHead = function() {
+    if (req.sessionID && !res.getHeader('Set-Cookie')) {
+      const cookieOptions = req.session.cookie || {};
+      const cookieValue = `sessionId=${req.sessionID}; Path=/; HttpOnly`;
+      res.setHeader('Set-Cookie', cookieValue);
+    }
+    return originalWriteHead.apply(this, arguments);
+  };
+  next();
 };
 
 // This variable will store the current vulnerability mode
 let currentVulnerability = 'none';
 
-// Middleware to configure session based on vulnerability type
+// Custom session ID generator
+const customGenerateId = (req) => {
+  // For session fixation, use the provided session ID
+  if (currentVulnerability === 'fixation' && req.query.sessionId) {
+    return req.query.sessionId;
+  }
+  
+  // Otherwise generate a random ID 
+  return crypto.randomBytes(16).toString('hex');
+};
+
+// Create custom session store
+const sessionStore = new CustomSessionStore();
+
+// Default session configuration
+const defaultSessionConfig = {
+  secret: 'vulnerable-session-secret',
+  resave: false,
+  saveUninitialized: true,
+  genid: customGenerateId,
+  store: sessionStore,
+  name: 'sessionId',
+  cookie: {
+    secure: false,
+    httpOnly: true
+  }
+};
+
+// Apply session cookie middleware before session middleware
+app.use(setUnsignedSessionCookie);
+
+// Initialize session with default configuration
+app.use(session(defaultSessionConfig));
+
+// Middleware to modify session based on vulnerability type
 app.use((req, res, next) => {
   const vulnerability = req.query.vulnerability || currentVulnerability;
-  
-  // Remove any existing session middleware
-  app.middleware = app.middleware || [];
-  app.middleware = app.middleware.filter(m => m !== session);
-  
-  let sessionConfig = { ...defaultSessionConfig };
   
   switch (vulnerability) {
     case 'fixation':
       // For session fixation, we allow the session ID to be set via query parameter
-      if (req.query.sessionId) {
-        req.cookies['connect.sid'] = req.query.sessionId;
-      }
+      // This is now handled by the genid function
       break;
       
     case 'hijacking':
@@ -96,22 +158,18 @@ app.use((req, res, next) => {
       
     case 'timeout':
       // For session timeout, we set a very long session timeout
-      sessionConfig.cookie.maxAge = 30 * 24 * 60 * 60 * 1000; // 30 days
+      if (req.session) {
+        req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000; // 30 days
+      }
       break;
       
     default:
       // Default secure configuration
-      sessionConfig = {
-        ...defaultSessionConfig,
-        cookie: {
-          ...defaultSessionConfig.cookie,
-          maxAge: 15 * 60 * 1000, // 15 minutes
-        }
-      };
+      if (req.session) {
+        req.session.cookie.maxAge = 15 * 60 * 1000; // 15 minutes
+      }
   }
   
-  // Apply the session middleware with the configured settings
-  app.use(session(sessionConfig));
   next();
 });
 
