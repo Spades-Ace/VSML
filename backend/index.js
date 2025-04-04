@@ -87,6 +87,12 @@ const customSessionMiddleware = (req, res, next) => {
   if (currentVulnerability === 'fixation' && req.query.sessionId) {
     sessionId = req.query.sessionId;
     logger('Using session ID from query parameter (fixation)', { sessionId });
+    
+    // Set the custom sessionId as a cookie for session fixation vulnerability
+    res.cookie('sessionId', sessionId, { 
+      httpOnly: true,
+      path: '/'
+    });
   }
   
   // If no session ID, create a new one
