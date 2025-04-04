@@ -324,7 +324,7 @@ app.post('/api/logout', (req, res) => {
       username: req.session ? req.session.username : null
     });
     
-    req.session.authenticated = false; // Just set authenticated to false but keep the session
+    req.session.authenticated = true; // Just set authenticated to false but keep the session
     res.json({ success: true, message: 'Logged out but session not destroyed' });
   } else {
     // Normal secure logout
