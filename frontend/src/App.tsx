@@ -8,7 +8,8 @@ import './App.css';
 
 // Configure axios to include credentials with all requests
 axios.defaults.withCredentials = true;
-axios.defaults.baseURL = 'http://localhost:3001';
+// Update the baseURL to use the relative path for API which will be proxied through Nginx
+axios.defaults.baseURL = '';
 
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);

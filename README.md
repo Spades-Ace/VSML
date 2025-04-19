@@ -93,9 +93,8 @@ The following accounts are available for testing:
    ```bash
    docker-compose up --build
    ```
-4. Access the lab in your browser:
-   - Frontend: <http://localhost:3000>
-   - Backend API: <http://localhost:3001>
+4. Access the lab in your browser via the Nginx reverse proxy:
+   - Lab Interface: <http://localhost>
 
 ## Stopping the Lab
 
@@ -104,6 +103,15 @@ To stop the lab environment:
 ```bash
 docker-compose down
 ```
+
+# Nginx Reverse Proxy Setup
+
+The lab environment uses Nginx as a reverse proxy to route requests to the appropriate services:
+
+- Requests to `/api` are routed to the backend API running on port 3001.
+- All other requests are routed to the frontend running on port 3000.
+
+This setup ensures a seamless integration between the frontend and backend services.
 
 # Technologies Used
 
@@ -117,7 +125,7 @@ docker-compose down
 
 ## Infrastructure:
 
-<img src="https://skillicons.dev/icons?i=docker" height=40/>
+<img src="https://skillicons.dev/icons?i=docker,nginx" height=40 alt="Docker and Nginx"/>
 
 # Architecture
 
